@@ -1,8 +1,7 @@
 import os
 from typing import List, Dict, Tuple
-from langchain_community.document_loaders import PDFMinerLoader
 from datetime import datetime
-
+from langchain_community.document_loaders import PyPDFLoader
 
 class TextFileLoader:
     def __init__(self, path: str, encoding: str = "utf-8", topic: str = "LLM"):
@@ -43,30 +42,20 @@ class TextFileLoader:
                     full_path = os.path.join(root, file)
                     self.load_file_with_metadata(full_path)
 
+
     def load_pdf_file(self):
-        loader = PDFMinerLoader(self.path)
-        self.documents = loader.load()  # Load documents using PDFMinerLoader
+        pdf_loader = PyPDFLoader(self.path)
+        pdf_documents = pdf_loader.load()
 
-        # for doc in docs:
-        #     content = doc.page_content
-        #     # Append content and metadata as a tuple
-        #     self.documents.append((content, {
-        #         "filename": doc.metadata['source'],
-        #         "date_added": self.date_added,
-        #         "topic": self.topic
-        #     }))
-
-    def load_file_with_metadata(self, file_path):
-        filename = os.path.basename(file_path)
-
-        with open(file_path, "r", encoding=self.encoding) as f:
-            content = f.read()
-            # Append content and metadata as a tuple
-            self.documents.append((content, {
-                "filename": filename,
+        for pdf_doc in pdf_documents:
+            content = pdf_doc.page_content
+            metadata = {
+                "filename": os.path.basename(self.path),
                 "date_added": self.date_added,
-                "topic": self.topic
-            }))
+                "topic": self.topic,
+                "page": pdf_doc.metadata['page']
+            }
+            self.documents.append((content, metadata))
 
     def load_documents(self) -> List[Tuple[str, Dict]]:
         self.load()
@@ -86,17 +75,17 @@ class CharacterTextSplitter:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    def split(self, document: 'Document') -> List[str]:
-        text = document.page_content  # Access the content of the Document
+    def split(self, text: str) -> List[str]:
         chunks = []
-        for i in range(0, len(text), self.chunk_size - self.chunk_overlap):
+        print(type(text))
+        for i in range(0, len(text.page_content), self.chunk_size - self.chunk_overlap):
             chunks.append(text[i : i + self.chunk_size])
         return chunks
 
-    def split_texts(self, documents: List['Document']) -> List[str]:
+    def split_texts(self, texts: List[str]) -> List[str]:
         chunks = []
-        for document in documents:
-            chunks.extend(self.split(document))  # Pass Document objects to split
+        for text in texts:
+            chunks.extend(self.split(text))
         return chunks
 
 
