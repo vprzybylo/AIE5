@@ -15,4 +15,8 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "scikit-learn>=1.6.1",
     "scipy>=1.15.1",
+    "rich>=13.9.4",
+    "langchain-community>=0.3.14",
+    "pdfminer>=20191125",
+    "pypdf>=5.1.0",
 ]
