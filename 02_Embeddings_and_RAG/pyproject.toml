@@ -19,4 +19,8 @@ dependencies = [
     "langchain-community>=0.3.14",
     "pdfminer>=20191125",
     "pypdf>=5.1.0",
+    "chromadb>=0.6.3",
+    "tiktoken>=0.8.0",
+    "faiss-cpu>=1.9.0.post1",
+    "langchain-openai>=0.3.1",
 ]
