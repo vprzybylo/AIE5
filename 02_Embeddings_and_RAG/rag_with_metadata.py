@@ -81,4 +81,5 @@ def ask_question(question):
 
 # Example usage
 ask_question("What is the main topic of the PDF?")
-ask_question("When was this document processed or accessed by the system and what is the content type?")
+ask_question("When was the LLM document last accessed?")
+ask_question("What was the content type of the LLM document")

@@ -1,7 +1,14 @@
 import os
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from datetime import datetime
 from langchain_community.document_loaders import PyPDFLoader
+from dataclasses import dataclass
+from rich import print as rprint
+
+@dataclass
+class Document:
+    page_content: str
+    metadata: Dict
 
 class TextFileLoader:
     def __init__(self, path: str, encoding: str = "utf-8", topic: str = "LLM"):
@@ -28,36 +35,44 @@ class TextFileLoader:
 
         with open(self.path, "r", encoding=self.encoding) as f:
             content = f.read()
-            # Append content and metadata as a tuple
-            self.documents.append((content, {
+            metadata = {
                 "filename": filename,
                 "date_added": self.date_added,
-                "topic": self.topic
-            }))
+                "topic": self.topic,
+                "source": self.path
+            }
+            self.documents.append(Document(page_content=content, metadata=metadata))
 
     def load_directory(self):
         for root, _, files in os.walk(self.path):
             for file in files:
                 if file.endswith(".txt"):
                     full_path = os.path.join(root, file)
-                    self.load_file_with_metadata(full_path)
-
+                    with open(full_path, "r", encoding=self.encoding) as f:
+                        content = f.read()
+                        metadata = {
+                            "filename": file,
+                            "date_added": self.date_added,
+                            "topic": self.topic,
+                            "source": full_path
+                        }
+                        self.documents.append(Document(page_content=content, metadata=metadata))
 
     def load_pdf_file(self):
         pdf_loader = PyPDFLoader(self.path)
         pdf_documents = pdf_loader.load()
-
+        
         for pdf_doc in pdf_documents:
-            content = pdf_doc.page_content
             metadata = {
                 "filename": os.path.basename(self.path),
                 "date_added": self.date_added,
                 "topic": self.topic,
+                "source": self.path,
                 "page": pdf_doc.metadata['page']
             }
-            self.documents.append((content, metadata))
+            self.documents.append(Document(page_content=pdf_doc.page_content, metadata=metadata))
 
-    def load_documents(self) -> List[Tuple[str, Dict]]:
+    def load_documents(self) -> List[Document]:
         self.load()
         return self.documents
 
@@ -65,7 +80,7 @@ class TextFileLoader:
 class CharacterTextSplitter:
     def __init__(
         self,
-        chunk_size: int = 1000,
+        chunk_size: int = 3000,
         chunk_overlap: int = 200,
     ):
         assert (
@@ -75,30 +90,28 @@ class CharacterTextSplitter:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
-    def split(self, text: str) -> List[str]:
+    def split(self, text: str, metadata: Dict = None) -> List[Document]:
         chunks = []
-        print(type(text))
-        for i in range(0, len(text.page_content), self.chunk_size - self.chunk_overlap):
-            chunks.append(text[i : i + self.chunk_size])
+        for i in range(0, len(text), self.chunk_size - self.chunk_overlap):
+            chunk_text = text[i : i + self.chunk_size]
+            chunks.append(Document(page_content=chunk_text, metadata=metadata.copy() if metadata else {}))
         return chunks
 
-    def split_texts(self, texts: List[str]) -> List[str]:
+    def split_texts(self, documents: List[Document]) -> List[Document]:
         chunks = []
-        for text in texts:
-            chunks.extend(self.split(text))
+        for doc in documents:
+            chunks.extend(self.split(doc.page_content, doc.metadata))
         return chunks
 
 
 if __name__ == "__main__":
     loader = TextFileLoader("data/KingLear.txt")
-    loader.load()
+    documents = loader.load_documents()
     splitter = CharacterTextSplitter()
-    chunks = splitter.split_texts(loader.documents)
+    chunks = splitter.split_texts(documents)
     print(len(chunks))
-    print(chunks[0])
+    print(f"Content: {chunks[0].page_content[:100]}")
+    print(f"Metadata: {chunks[0].metadata}")
     print("--------")
-    print(chunks[1])
-    print("--------")
-    print(chunks[-2])
-    print("--------")
-    print(chunks[-1])
+    print(f"Content: {chunks[-1].page_content[-100:]}")
+    print(f"Metadata: {chunks[-1].metadata}")
