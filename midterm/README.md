@@ -47,13 +47,18 @@ We will build a RAG-based chatbot with the following stack:
 ## Task 3: Data Strategy
 
 ### Data Sources
-![Grid Code PDF](https://www.nationalgrid.com/sites/default/files/documents/8589935310-Complete%20Grid%20Code.pdf)
+[Grid Code PDF](https://www.nationalgrid.com/sites/default/files/documents/8589935310-Complete%20Grid%20Code.pdf)
 
 ### Chunking Strategy
 We employ a hybrid chunking approach:
 - Section-based chunks for maintaining regulatory context
-- Smaller overlapping chunks (500 tokens) for detailed technical specifications
-- Special handling for tables and diagrams
+- Smaller overlapping chunks for detailed technical specifications
+
+**chunk size**: The maximum size of each chunk is set to 2000 characters.
+
+**chunk_overlap**: Each chunk overlaps with the previous chunk by 50 characters to ensure context continuity.
+
+**separators**: The text is split based on the following separators in order of priority: double newlines (\n\n), single newline (\n), period (.), space ( ), and empty string ("").
 
 ## Task 4: End-to-End Prototype
 
@@ -61,12 +66,24 @@ We employ a hybrid chunking approach:
 
 ## Task 5: Evaluation Dataset
 
-Initial RAGAS metrics:
-| Metric | Target Value |
-|--------|--------------|
-| Context Recall |  |
-| Faithfulness | |
-| Answer Relevancy | |
+- With out-of-the-box RAG:
+
+| Metric               | Value   |
+|----------------------|---------|
+| Faithfulness          | 0.7958  |
+| Answer Relevancy      | 0.8701  |
+| Context Recall        | 0.9583  |
+| Context Precision      | 0.8667  |
+
+
+1. **Faithfulness (0.7958)**: This metric indicates that approximately 79.58% of the generated responses accurately reflect the ground truth. While this is a relatively good score, there is still room for improvement to ensure that the responses are more closely aligned with the expected outputs.
+
+2. **Answer Relevancy (0.8701)**: With a score of 87.01%, the responses are highly relevant to the questions posed. This suggests that the model is effectively understanding and addressing the user's queries, which is a positive indicator of the pipeline's performance.
+
+3. **Context Recall (0.9583)**: A context recall of 95.83% indicates that the model is very effective at retrieving relevant context from the documents. This high score suggests that the model is capable of accessing and utilizing the necessary information to generate responses.
+
+4. **Context Precision (0.8667)**: With a context precision of 86.67%, the model is also good at ensuring that the contexts it retrieves are relevant to the user's questions. This score indicates that the model is not only retrieving a lot of relevant context but is also filtering out irrelevant information effectively.
+
 
 ## Task 6: Fine-Tuning Plan
 
@@ -80,4 +97,7 @@ Comparative metrics will be tracked for:
 - Response accuracy
 - Context relevance
 - Query response time
-- User satisfaction
+
+
+
+
