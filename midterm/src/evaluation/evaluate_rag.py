@@ -23,6 +23,8 @@ load_dotenv(env_path)
 
 
 from embedding.model import EmbeddingModel
+from langchain.chat_models import init_chat_model
+from langchain_core.rate_limiters import InMemoryRateLimiter
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from rag.chain import RAGChain
 from rag.document_loader import GridCodeLoader
@@ -59,8 +61,18 @@ def generate_test_dataset(documents, n_questions=10):
     """Generate synthetic test dataset using RAGAS"""
     logger.info("Generating synthetic test dataset...")
 
+    # Initialize the rate limiter
+    rate_limiter = InMemoryRateLimiter(
+        requests_per_second=1,  # Make a request once every 1 second
+        check_every_n_seconds=0.1,  # Check every 100 ms to see if allowed to make a request
+        max_bucket_size=10,  # Controls the maximum burst size
+    )
+
+    # Initialize the chat model with the rate limiter
+    model = init_chat_model("gpt-4o", temperature=0, rate_limiter=rate_limiter)
+
     # Initialize generator models
-    generator_llm = LangchainLLMWrapper(ChatOpenAI(model="gpt-4o"))
+    generator_llm = LangchainLLMWrapper(model)
     generator_embeddings = LangchainEmbeddingsWrapper(OpenAIEmbeddings())
 
     # Create test set generator
@@ -150,6 +162,7 @@ def main():
         # Print results
         logger.info("Evaluation Results:")
         logger.info(results)
+        # out-of-the-box: {'faithfulness': 0.7958, 'answer_relevancy': 0.8701, 'context_recall': 0.9583, 'context_precision': 0.8667}
 
     except Exception as e:
         logger.error(f"Evaluation failed: {str(e)}")
