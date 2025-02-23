@@ -10,3 +10,4 @@ pypdf==3.17.1
 rich>=13.7.0
 rapidfuzz>=3.6.1
 tenacity>=8.2.3 
+sentence-transformers==3.4.1

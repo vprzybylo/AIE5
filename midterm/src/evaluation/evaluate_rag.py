@@ -50,14 +50,14 @@ def setup_rag():
     logger.info(f"Loaded {len(documents)} document chunks")
 
     # Initialize embedding model and vectorstore
-    embedding_model = EmbeddingModel()
+    embedding_model = EmbeddingModel(model_type="finetuned")
     vectorstore = VectorStore(embedding_model)
     vectorstore = vectorstore.create_vectorstore(documents)
 
     return RAGChain(vectorstore), documents
 
 
-def generate_test_dataset(documents, n_questions=10):
+def generate_test_dataset(documents, n_questions=30):
     """Generate synthetic test dataset using RAGAS"""
     logger.info("Generating synthetic test dataset...")
 
@@ -85,8 +85,14 @@ def generate_test_dataset(documents, n_questions=10):
         documents, testset_size=n_questions
     )
 
-    logger.info(f"Generated synthetic dataset with {len(dataset)} test cases")
-    return dataset.to_pandas()
+    df = dataset.to_pandas()
+    df.to_csv(
+        "../data/processed/synthetic_test_dataset_finetuned.csv", index=False
+    )  # Save as CSV
+    logger.info(
+        f"Generated synthetic dataset with {len(df)} test cases and saved to 'synthetic_test_dataset_finetuned.csv'."
+    )
+    return df
 
 
 @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(5))
