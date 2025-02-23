@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 import time
 from tenacity import retry, wait_exponential, stop_after_attempt
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +25,7 @@ from rag.vectorstore import VectorStore
 from rag.chain import RAGChain
 from embedding.model import EmbeddingModel
 from langchain_openai import ChatOpenAI
-from ragas import evaluate
+from ragas import evaluate, RunConfig, EvaluationDataset
 from ragas.metrics import (
     Faithfulness,
     AnswerRelevancy,
@@ -35,7 +36,6 @@ from ragas.llms import LangchainLLMWrapper
 from ragas.testset import TestsetGenerator
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from langchain_openai import OpenAIEmbeddings
-from rich import print
 
 
 def setup_rag():
@@ -79,7 +79,7 @@ def generate_test_dataset(documents, n_questions=10):
     )
     
     logger.info(f"Generated synthetic dataset with {len(dataset)} test cases")
-    return dataset
+    return dataset.to_pandas()
 
 @retry(
     wait=wait_exponential(multiplier=1, min=4, max=60),
@@ -95,31 +95,45 @@ def evaluate_rag_system(rag_chain, test_dataset):
     
     # Get RAG responses for each question
     eval_data = []
-    for item in test_dataset:
+    
+    # Iterate through DataFrame rows
+    for _, row in test_dataset.iterrows():
         # Add delay between requests
         time.sleep(3)  # Wait 3 seconds between requests
-        response = get_rag_response(rag_chain, item.user_input)
+        response = get_rag_response(rag_chain, row['user_input'])
         eval_data.append({
-            "question": item.user_input,
-            "answer": response["answer"],
-            "contexts": [doc.page_content for doc in response["context"]],
-            "ground_truths": [item.reference]  # Using reference as ground truth
+            "user_input": row['user_input'],
+            "response": response["answer"],
+            "retrieved_contexts": [doc.page_content for doc in response["context"]],
+            "ground_truth": row['reference'],  # Keep for faithfulness
+            "reference": row['reference']      # Keep for context_recall
         })
-        logger.info(f"Processed question: {item.user_input[:50]}...")
+        logger.info(f"Processed question: {row['user_input'][:50]}...")
+    
+    # Convert to pandas then to EvaluationDataset
+    eval_df = pd.DataFrame(eval_data)
+    logger.info("Evaluation DataFrame columns:")
+    logger.info(eval_df.columns)
+    logger.info("Sample evaluation data:")
+    logger.info(eval_df.iloc[0].to_dict())
+    eval_dataset = EvaluationDataset.from_pandas(eval_df)
     
     # Initialize RAGAS evaluator
     evaluator_llm = LangchainLLMWrapper(ChatOpenAI(model="gpt-4o"))
     
+    custom_run_config = RunConfig(timeout=360)
+
     # Run evaluation
     results = evaluate(
-        eval_data,
+        eval_dataset,
         metrics=[
             Faithfulness(),
             AnswerRelevancy(),
             ContextRecall(),
             ContextPrecision()
         ],
-        llm=evaluator_llm
+        llm=evaluator_llm,
+        run_config=custom_run_config
     )
     
     return results
