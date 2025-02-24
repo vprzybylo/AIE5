@@ -66,23 +66,43 @@ We employ a hybrid chunking approach:
 
 ## Task 5: Evaluation Dataset
 
-- With out-of-the-box RAG:
+## Embedding Model Comparison
 
+### OpenAI text-embedding-3-small
 | Metric               | Value   |
 |----------------------|---------|
-| Faithfulness          | 0.7958  |
-| Answer Relevancy      | 0.8701  |
-| Context Recall        | 0.9583  |
-| Context Precision      | 0.8667  |
+| Faithfulness         | 0.9056  |
+| Answer Relevancy     | 0.6007  |
+| Context Recall       | 0.7955  |
+| Context Precision    | 0.5833  |
 
+### Fine-tuned snowflake-arctic-embed-l
+| Metric               | Value   |
+|----------------------|---------|
+| Faithfulness         | 0.8045  |
+| Answer Relevancy     | 0.5738  |
+| Context Recall       | 0.5556  |
+| Context Precision    | 0.4600  |
 
-1. **Faithfulness (0.7958)**: This metric indicates that approximately 79.58% of the generated responses accurately reflect the ground truth. While this is a relatively good score, there is still room for improvement to ensure that the responses are more closely aligned with the expected outputs.
+### Analysis
 
-2. **Answer Relevancy (0.8701)**: With a score of 87.01%, the responses are highly relevant to the questions posed. This suggests that the model is effectively understanding and addressing the user's queries, which is a positive indicator of the pipeline's performance.
+The comparison reveals several interesting findings:
 
-3. **Context Recall (0.9583)**: A context recall of 95.83% indicates that the model is very effective at retrieving relevant context from the documents. This high score suggests that the model is capable of accessing and utilizing the necessary information to generate responses.
+1. **OpenAI Superiority**: OpenAI's text-embedding-3-small outperforms the fine-tuned model across all metrics:
+   - Higher faithfulness (90.56% vs 80.45%)
+   - Better answer relevancy (60.07% vs 57.38%)
+   - Stronger context recall (79.55% vs 55.56%)
+   - Better context precision (58.33% vs 46.00%)
 
-4. **Context Precision (0.8667)**: With a context precision of 86.67%, the model is also good at ensuring that the contexts it retrieves are relevant to the user's questions. This score indicates that the model is not only retrieving a lot of relevant context but is also filtering out irrelevant information effectively.
+2. **Fine-tuning Impact**: Despite being fine-tuned on technical documentation, the snowflake-arctic-embed-l model showed:
+   - ~10% decrease in faithfulness
+   - ~24% decrease in context recall
+   - ~12% decrease in context precision
+
+3. **Potential Factors**:
+   - The base model (snowflake-arctic-embed-l) may not be as sophisticated as OpenAI's embedding model
+   - The fine-tuning dataset or process might need optimization
+   - OpenAI's model may have better pre-training on technical documentation
 
 
 ## Task 6: Fine-Tuning Plan
