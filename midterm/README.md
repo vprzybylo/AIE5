@@ -23,8 +23,8 @@ We will build a RAG-based chatbot with the following stack:
 - 🤖 **LLM**: GPT-4 
 *Chosen for its strong technical understanding and ability to process complex regulatory language*
 
-- 🔢 **Embedding Models**: text-embedding-3-small, BAAI/bge-large-en-v1.5
-*Starting with OpenAI for rapid prototyping, then fine-tuning BAAI for domain-specific understanding*
+- 🔢 **Embedding Models**: text-embedding-3-small, Snowflake/snowflake-arctic-embed-l, [finetuned-arctic-ft on huggingface](https://huggingface.co/vanessaprzybylo/finetuned_arctic_ft)
+*Starting with OpenAI for rapid prototyping, then fine-tuning snowflake-arctic-embed-l for domain-specific understanding*
 
 - 🎺 **Orchestration**: LangChain
 *Provides robust RAG pipeline components and easy integration with evaluation tools*
@@ -101,8 +101,9 @@ The comparison reveals several interesting findings:
 
 3. **Potential Factors**:
    - The base model (snowflake-arctic-embed-l) may not be as sophisticated as OpenAI's embedding model
-   - The fine-tuning dataset or process might need optimization
+   - The fine-tuning dataset or process might need optimization or more data (only passed 20 pages of the Grid Code)
    - OpenAI's model may have better pre-training on technical documentation
+   - Rate limiting of the API calls to OpenAI may have affected the results
 
 
 ## Task 6: Fine-Tuning Plan
