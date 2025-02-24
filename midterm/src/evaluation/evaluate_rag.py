@@ -21,10 +21,10 @@ root_dir = Path(__file__).parent.parent.parent
 env_path = root_dir / ".env"
 load_dotenv(env_path)
 
-
 from embedding.model import EmbeddingModel
 from langchain.chat_models import init_chat_model
 from langchain_core.rate_limiters import InMemoryRateLimiter
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from rag.chain import RAGChain
 from rag.document_loader import GridCodeLoader
@@ -36,8 +36,8 @@ from ragas.metrics import AnswerRelevancy, ContextPrecision, ContextRecall, Fait
 from ragas.testset import TestsetGenerator
 
 
-def setup_rag():
-    """Initialize RAG system for evaluation"""
+def setup_rag(embedding_model_type):
+    """Initialize RAG system for evaluation with specified embedding model."""
     logger.info("Setting up RAG system...")
 
     # Load documents
@@ -50,7 +50,7 @@ def setup_rag():
     logger.info(f"Loaded {len(documents)} document chunks")
 
     # Initialize embedding model and vectorstore
-    embedding_model = EmbeddingModel(model_type="finetuned")
+    embedding_model = EmbeddingModel(model_type=embedding_model_type)
     vectorstore = VectorStore(embedding_model)
     vectorstore = vectorstore.create_vectorstore(documents)
 
@@ -58,7 +58,14 @@ def setup_rag():
 
 
 def generate_test_dataset(documents, n_questions=30):
-    """Generate synthetic test dataset using RAGAS"""
+    """Generate synthetic test dataset using RAGAS or load it if it already exists."""
+    dataset_path = "../data/processed/synthetic_test_dataset.csv"
+
+    # Check if the dataset already exists
+    if os.path.exists(dataset_path):
+        logger.info(f"Loading existing synthetic test dataset from {dataset_path}...")
+        return pd.read_csv(dataset_path)
+
     logger.info("Generating synthetic test dataset...")
 
     # Initialize the rate limiter
@@ -86,11 +93,9 @@ def generate_test_dataset(documents, n_questions=30):
     )
 
     df = dataset.to_pandas()
-    df.to_csv(
-        "../data/processed/synthetic_test_dataset_finetuned.csv", index=False
-    )  # Save as CSV
+    df.to_csv(dataset_path, index=False)  # Save as CSV
     logger.info(
-        f"Generated synthetic dataset with {len(df)} test cases and saved to 'synthetic_test_dataset_finetuned.csv'."
+        f"Generated synthetic dataset with {len(df)} test cases and saved to '{dataset_path}'."
     )
     return df
 
@@ -151,24 +156,49 @@ def evaluate_rag_system(rag_chain, test_dataset):
     return results
 
 
+def run_evaluation_with_model(rag_chain, test_dataset, embedding_model_type):
+    """Run evaluation with the specified embedding model type."""
+    logger.info(f"Running evaluation with {embedding_model_type} embeddings...")
+
+    # Run evaluation
+    results = evaluate_rag_system(rag_chain, test_dataset)
+
+    logger.info(f"Evaluation Results for {embedding_model_type}:")
+    logger.info(results)
+
+    # Save results to CSV
+    results_path = Path("../data/processed/")
+    results_path.mkdir(parents=True, exist_ok=True)
+
+    # Convert results to DataFrame
+    results_df = pd.DataFrame([results])
+    results_df.to_csv(
+        results_path / f"evaluation_results_{embedding_model_type}.csv", index=False
+    )
+    logger.info(
+        f"Saved evaluation results to evaluation_results_{embedding_model_type}.csv"
+    )
+
+
 def main():
     """Main evaluation script"""
     logger.info("Starting RAG evaluation")
 
     try:
-        # Setup RAG system
-        rag_chain, documents = setup_rag()
+        # Setup RAG system with the fine-tuned embedding model
+        rag_chain_finetuned, documents = setup_rag("finetuned")
 
         # Generate synthetic test dataset
         test_dataset = generate_test_dataset(documents)
 
-        # Run evaluation
-        results = evaluate_rag_system(rag_chain, test_dataset)
+        # Run evaluations with both embedding models
+        run_evaluation_with_model(rag_chain_finetuned, test_dataset, "finetuned")
 
-        # Print results
-        logger.info("Evaluation Results:")
-        logger.info(results)
-        # out-of-the-box: {'faithfulness': 0.7958, 'answer_relevancy': 0.8701, 'context_recall': 0.9583, 'context_precision': 0.8667}
+        # # Setup RAG system with the OpenAI embedding model
+        # rag_chain_openai, _ = setup_rag("openai")
+
+        # # Run evaluation with OpenAI embeddings
+        # run_evaluation_with_model(rag_chain_openai, test_dataset, "openai")
 
     except Exception as e:
         logger.error(f"Evaluation failed: {str(e)}")
