@@ -1,10 +1,7 @@
 import logging
 import os
-from pathlib import Path
 
 from langchain_community.vectorstores import Qdrant
-from qdrant_client import QdrantClient
-from qdrant_client.http import models
 
 logger = logging.getLogger(__name__)
 

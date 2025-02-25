@@ -24,7 +24,6 @@ load_dotenv(env_path)
 from embedding.model import EmbeddingModel
 from langchain.chat_models import init_chat_model
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from rag.chain import RAGChain
 from rag.document_loader import GridCodeLoader
