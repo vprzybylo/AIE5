@@ -1,22 +1,21 @@
-# Use an official Python runtime as a parent image
-FROM python:3.10-slim
+# Read the doc: https://huggingface.co/docs/hub/spaces-sdks-docker
+FROM python:3.9
 
-# Set the working directory in the container
+RUN useradd -m -u 1000 user
+USER user
+ENV PATH="/home/user/.local/bin:$PATH"
+
 WORKDIR /app
 
 # Copy only the midterm project files
-COPY midterm/requirements.txt .
-COPY midterm/src ./src
-COPY midterm/data ./data
+COPY --chown=user midterm/requirements.txt requirements.txt
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy the midterm directory contents
+COPY --chown=user midterm /app
 
-# Make port 8501 available to the world outside this container
-EXPOSE 8501
-
-# Define environment variable
+# Set environment variable for Python path
 ENV PYTHONPATH=/app/src
 
-# Run streamlit app
-CMD ["streamlit", "run", "src/ui/app.py"]
+# Run streamlit on port 7860 for Hugging Face Spaces
+CMD ["streamlit", "run", "src/ui/app.py", "--server.port", "7860", "--server.address", "0.0.0.0"]
