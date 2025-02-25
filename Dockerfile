@@ -8,7 +8,6 @@ WORKDIR /app
 COPY midterm/requirements.txt .
 COPY midterm/src ./src
 COPY midterm/data ./data
-COPY midterm/.env .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt

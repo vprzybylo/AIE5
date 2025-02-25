@@ -30,15 +30,41 @@ logger = logging.getLogger(__name__)
 src_path = Path(__file__).parent.parent
 sys.path.append(str(src_path))
 
-# Load environment variables
-root_dir = Path(__file__).parent.parent.parent
-env_path = root_dir / ".env"
-load_dotenv(env_path)
 
-# Replace the .env loading with:
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    st.error("OpenAI API key not found. Please set it in the environment variables.")
+# Get secrets from Hugging Face Space
+def get_secrets():
+    """Get secrets from Hugging Face Space or local environment."""
+    if os.environ.get("SPACE_ID"):
+        # We're in a Hugging Face Space
+        return {
+            "OPENAI_API_KEY": st.secrets["OPENAI_API_KEY"],
+            "TAVILY_API_KEY": st.secrets.get("TAVILY_API_KEY"),
+            "LANGCHAIN_API_KEY": st.secrets.get("LANGCHAIN_API_KEY"),
+            "LANGCHAIN_PROJECT": st.secrets.get("LANGCHAIN_PROJECT", "GridGuide"),
+            "LANGCHAIN_TRACING_V2": st.secrets.get("LANGCHAIN_TRACING_V2", "true"),
+        }
+    else:
+        # We're running locally, use environment variables
+        return {
+            "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY"),
+            "TAVILY_API_KEY": os.environ.get("TAVILY_API_KEY"),
+            "LANGCHAIN_API_KEY": os.environ.get("LANGCHAIN_API_KEY"),
+            "LANGCHAIN_PROJECT": os.environ.get("LANGCHAIN_PROJECT", "GridGuide"),
+            "LANGCHAIN_TRACING_V2": os.environ.get("LANGCHAIN_TRACING_V2", "true"),
+        }
+
+
+# Set up environment variables from secrets
+secrets = get_secrets()
+for key, value in secrets.items():
+    if value:
+        os.environ[key] = value
+
+# Verify API keys
+if not os.environ.get("OPENAI_API_KEY"):
+    st.error(
+        "OpenAI API key not found. Please set it in the Hugging Face Space secrets."
+    )
     st.stop()
 
 from embedding.model import EmbeddingModel
