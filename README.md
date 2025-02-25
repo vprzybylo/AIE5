@@ -6,7 +6,7 @@ colorTo: gray
 sdk: streamlit
 pinned: false
 license: mit
-short_description: Field assistant for utility workers to check grid codes and weather conditions
+short_description: Field assistant for utility workers
 startup_duration_timeout: 1h
 ---
 
