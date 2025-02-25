@@ -6,7 +6,6 @@ from typing import Annotated, TypedDict
 
 import requests
 import streamlit as st
-from dotenv import load_dotenv
 from langchain import hub
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.messages import AIMessage, HumanMessage
