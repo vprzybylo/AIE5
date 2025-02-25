@@ -35,6 +35,12 @@ root_dir = Path(__file__).parent.parent.parent
 env_path = root_dir / ".env"
 load_dotenv(env_path)
 
+# Replace the .env loading with:
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    st.error("OpenAI API key not found. Please set it in the environment variables.")
+    st.stop()
+
 from embedding.model import EmbeddingModel
 from rag.chain import RAGChain
 from rag.document_loader import GridCodeLoader
@@ -92,12 +98,12 @@ class WeatherTool:
 
 def initialize_rag():
     """Initialize RAG system."""
-    # Check if RAG chain is already in session state (for page refreshes)
     if "rag_chain" in st.session_state:
         logger.info("Using cached RAG chain from session state")
         return st.session_state.rag_chain
 
-    data_path = root_dir / "data" / "raw" / "grid_code.pdf"
+    # Use relative path from src directory
+    data_path = Path(__file__).parent.parent.parent / "data" / "raw" / "grid_code.pdf"
     if not data_path.exists():
         raise FileNotFoundError(f"PDF not found: {data_path}")
 
