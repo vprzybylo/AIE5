@@ -1,17 +1,23 @@
-import json
 import logging
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
+from typing import Annotated, TypedDict
 
 import requests
 import streamlit as st
 from dotenv import load_dotenv
+from langchain import hub
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
+from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -19,66 +25,18 @@ logger = logging.getLogger(__name__)
 src_path = Path(__file__).parent.parent
 sys.path.append(str(src_path))
 
-# Create data directories if they don't exist
-def setup_data_directories():
-    root_dir = Path(__file__).parent.parent.parent
-    data_dirs = [
-        root_dir / "data" / "raw",
-        root_dir / "data" / "processed",
-        root_dir / "data" / "processed" / "qdrant",
-    ]
-
-    for dir_path in data_dirs:
-        dir_path.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Ensured directory exists: {dir_path}")
-
-# Load environment variables from .env file in project root
+# Load environment variables
 root_dir = Path(__file__).parent.parent.parent
 env_path = root_dir / ".env"
-logger.info(f"Loading environment from: {env_path}")
 load_dotenv(env_path)
-
-# Ensure data directories exist
-setup_data_directories()
-
-# Verify OpenAI API key is loaded
-if not os.getenv("OPENAI_API_KEY"):
-    logger.error("OpenAI API key not found")
-    st.error("OpenAI API key not found. Please ensure it is set in your .env file.")
-    st.stop()
-else:
-    logger.info("OpenAI API key loaded successfully")
 
 from embedding.model import EmbeddingModel
 from rag.chain import RAGChain
 from rag.document_loader import GridCodeLoader
 from rag.vectorstore import VectorStore
 
-def initialize_rag():
-    # Get absolute path to the data file
-    root_dir = Path(__file__).parent.parent.parent
-    data_path = root_dir / "data" / "raw" / "grid_code.pdf"
 
-    if not data_path.exists():
-        logger.error(f"PDF not found: {data_path}")
-        st.error(f"Grid Code PDF not found at {data_path}. Please ensure the file exists.")
-        st.stop()
-
-    logger.info("Loading and processing documents...")
-    loader = GridCodeLoader(str(data_path), pages=7)
-    documents = loader.load_and_split()
-    logger.info(f"Split documents into {len(documents)} chunks")
-
-    logger.info("Initializing embedding model...")
-    embedding_model = EmbeddingModel()
-    vectorstore = VectorStore(embedding_model)
-    vectorstore = vectorstore.create_vectorstore(documents)
-    logger.info("Vector store created successfully")
-
-    logger.info("Initializing RAG chain...")
-    return RAGChain(vectorstore)
-
-class WeatherService:
+class WeatherTool:
     def __init__(self):
         self.base_url = "https://api.weather.gov"
         self.headers = {
@@ -96,80 +54,111 @@ class WeatherService:
             }
         return None
 
-    def get_forecast(self, zipcode):
+    def run(self, zipcode):
         coords = self.get_coordinates_from_zip(zipcode)
         if not coords:
-            return None
+            return "Invalid ZIP code or unable to get coordinates."
 
         point_url = f"{self.base_url}/points/{coords['lat']},{coords['lon']}"
         response = requests.get(point_url, headers=self.headers)
 
         if response.status_code != 200:
-            return None
+            return "Unable to fetch weather data."
 
         grid_data = response.json()
         forecast_url = grid_data["properties"]["forecast"]
 
         response = requests.get(forecast_url, headers=self.headers)
         if response.status_code == 200:
-            return response.json()["properties"]["periods"]
-        return None
+            current = response.json()["properties"]["periods"][0]
+            return f"Current conditions: {current['temperature']}°{current['temperatureUnit']}, {current['shortForecast']}. {current['detailedForecast']}"
+        return "Unable to fetch forecast data."
+
+
+def initialize_rag():
+    data_path = root_dir / "data" / "raw" / "grid_code.pdf"
+    if not data_path.exists():
+        raise FileNotFoundError(f"PDF not found: {data_path}")
+
+    loader = GridCodeLoader(str(data_path), pages=17)
+    documents = loader.load_and_split()
+
+    embedding_model = EmbeddingModel()
+    vectorstore = VectorStore(embedding_model)
+    vectorstore = vectorstore.create_vectorstore(documents)
+
+    return RAGChain(vectorstore)
+
+
+class RAGTool:
+    def __init__(self, rag_chain):
+        self.rag_chain = rag_chain
+
+    def run(self, question: str) -> str:
+        """Answer questions using the Grid Code."""
+        response = self.rag_chain.invoke(question)
+        return response["answer"]
+
+
+class AgentState(TypedDict):
+    """State definition for the agent."""
+
+    messages: Annotated[list, add_messages]
+
+
+def create_agent_workflow(rag_chain, weather_tool):
+    """Create an agent that can use both RAG and weather tools."""
+
+    # Define the tools
+    tools = [
+        Tool(
+            name="grid_code_query",
+            description="Answer questions about the Grid Code and electrical regulations",
+            func=lambda q: rag_chain.invoke(q)["answer"],
+        ),
+        Tool(
+            name="get_weather",
+            description="Get weather forecast for a ZIP code. Input should be a 5-digit ZIP code.",
+            func=weather_tool.run,
+        ),
+    ]
+
+    # Initialize the LLM
+    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+
+    # Get the agent prompt
+    prompt = hub.pull("hwchase17/openai-functions-agent")
+
+    # Create the agent
+    agent = create_tool_calling_agent(llm, tools, prompt)
+
+    # Create the executor
+    return AgentExecutor(
+        agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
+    )
+
 
 def main():
-    st.title("Grid Code Assistant")
+    st.title("Grid Code & Weather Assistant")
 
-    # Initialize session state variables if they don't exist
+    # Initialize if not in session state
     if "initialized" not in st.session_state:
-        st.session_state.weather_service = WeatherService()
-        st.session_state.rag_chain = initialize_rag()
+        rag_chain = initialize_rag()
+        weather_tool = WeatherTool()
+        st.session_state.app = create_agent_workflow(rag_chain, weather_tool)
         st.session_state.initialized = True
-        logger.info("Session state initialized successfully")
-    
-    # Create tabs for different functionalities
-    tab1, tab2 = st.tabs(["Grid Code Q&A", "Weather Information"])
-    
-    with tab1:
-        question = st.text_input("Ask a question about the Grid Code:")
-        
-        if question:
-            logger.info(f"Processing question: {question}")
-            with st.spinner("Finding answer..."):
-                response = st.session_state.rag_chain.invoke(question)
-                logger.info("Generated response successfully")
-                st.write(response["answer"])
-    
-    with tab2:
-        st.header("Weather Information")
-        zipcode = st.text_input("Enter ZIP code for weather forecast:", max_chars=5)
-        
-        if zipcode and len(zipcode) == 5:
-            with st.spinner("Fetching weather data..."):
-                forecast = st.session_state.weather_service.get_forecast(zipcode)
-                
-                if forecast:
-                    # Display current conditions
-                    current = forecast[0]
-                    st.subheader("Current Conditions")
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.metric("Temperature", f"{current['temperature']}°{current['temperatureUnit']}")
-                        st.write(f"**Wind:** {current['windSpeed']} {current['windDirection']}")
-                    
-                    with col2:
-                        st.write(f"**Forecast:** {current['shortForecast']}")
-                        st.write(f"**Details:** {current['detailedForecast']}")
-                    
-                    # Display future forecast
-                    st.subheader("Extended Forecast")
-                    for period in forecast[1:4]:  # Next 3 periods
-                        with st.expander(f"{period['name']}"):
-                            st.write(f"**Temperature:** {period['temperature']}°{period['temperatureUnit']}")
-                            st.write(f"**Wind:** {period['windSpeed']} {period['windDirection']}")
-                            st.write(f"**Forecast:** {period['shortForecast']}")
-                            st.write(f"**Details:** {period['detailedForecast']}")
-                else:
-                    st.error("Unable to fetch weather data. Please check the ZIP code and try again.")
+
+    # Create the input box
+    user_input = st.text_input("Ask about weather or the Grid Code:")
+
+    if user_input:
+        with st.spinner("Processing your request..."):
+            # Invoke the agent executor
+            result = st.session_state.app.invoke({"input": user_input})
+
+            # Display the result
+            st.write(result["output"])
+
 
 if __name__ == "__main__":
     main()
