@@ -10,7 +10,12 @@ from dotenv import load_dotenv
 from langchain import hub
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    HumanMessagePromptTemplate,
+    MessagesPlaceholder,
+    SystemMessagePromptTemplate,
+)
 from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
@@ -51,43 +56,66 @@ class WeatherTool:
             return {
                 "lat": data["places"][0]["latitude"],
                 "lon": data["places"][0]["longitude"],
+                "place": data["places"][0]["place name"],
+                "state": data["places"][0]["state"],
             }
         return None
 
     def run(self, zipcode):
         coords = self.get_coordinates_from_zip(zipcode)
         if not coords:
-            return "Invalid ZIP code or unable to get coordinates."
+            return {"error": "Invalid ZIP code or unable to get coordinates."}
 
         point_url = f"{self.base_url}/points/{coords['lat']},{coords['lon']}"
         response = requests.get(point_url, headers=self.headers)
 
         if response.status_code != 200:
-            return "Unable to fetch weather data."
+            return {"error": "Unable to fetch weather data."}
 
         grid_data = response.json()
         forecast_url = grid_data["properties"]["forecast"]
 
         response = requests.get(forecast_url, headers=self.headers)
         if response.status_code == 200:
-            current = response.json()["properties"]["periods"][0]
-            return f"Current conditions: {current['temperature']}°{current['temperatureUnit']}, {current['shortForecast']}. {current['detailedForecast']}"
-        return "Unable to fetch forecast data."
+            forecast_data = response.json()["properties"]["periods"]
+            weather_data = {
+                "type": "weather",
+                "location": f"{coords['place']}, {coords['state']}",
+                "current": forecast_data[0],
+                "forecast": forecast_data[1:4],
+            }
+            # Save to session state
+            st.session_state.weather_data = weather_data
+            return weather_data
+        return {"error": "Unable to fetch forecast data."}
 
 
 def initialize_rag():
+    """Initialize RAG system."""
+    # Check if RAG chain is already in session state (for page refreshes)
+    if "rag_chain" in st.session_state:
+        logger.info("Using cached RAG chain from session state")
+        return st.session_state.rag_chain
+
     data_path = root_dir / "data" / "raw" / "grid_code.pdf"
     if not data_path.exists():
         raise FileNotFoundError(f"PDF not found: {data_path}")
 
-    loader = GridCodeLoader(str(data_path), pages=17)
-    documents = loader.load_and_split()
+    with st.spinner("Loading Grid Code documents..."):
+        loader = GridCodeLoader(str(data_path), pages=17)
+        documents = loader.load_and_split()
+        logger.info(f"Loaded {len(documents)} document chunks")
 
-    embedding_model = EmbeddingModel()
-    vectorstore = VectorStore(embedding_model)
-    vectorstore = vectorstore.create_vectorstore(documents)
+    with st.spinner("Creating vector store..."):
+        embedding_model = EmbeddingModel()
+        vectorstore = VectorStore(embedding_model)
+        vectorstore = vectorstore.create_vectorstore(documents)
+        logger.info("Vector store created successfully")
 
-    return RAGChain(vectorstore)
+    # Cache the RAG chain in session state
+    rag_chain = RAGChain(vectorstore)
+    st.session_state.rag_chain = rag_chain
+    return rag_chain
 
 
 class RAGTool:
@@ -119,34 +147,100 @@ def create_agent_workflow(rag_chain, weather_tool):
         Tool(
             name="get_weather",
             description="Get weather forecast for a ZIP code. Input should be a 5-digit ZIP code.",
-            func=weather_tool.run,
+            func=lambda z: weather_tool.run(z),
         ),
     ]
 
     # Initialize the LLM
     llm = ChatOpenAI(model="gpt-4o", temperature=0)
 
-    # Get the agent prompt
-    prompt = hub.pull("hwchase17/openai-functions-agent")
+    # Create the custom prompt
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            SystemMessagePromptTemplate.from_template(
+                """You are a helpful assistant that specializes in two areas:
+            1. Answering questions about electrical Grid Code regulations
+            2. Providing weather information for specific locations
+
+            For weather queries:
+            - Extract the ZIP code from the question
+            - Use the get_weather tool to fetch the forecast
+
+            For Grid Code questions:
+            - Use the grid_code_query tool to find relevant information
+            - If the information isn't in the Grid Code, clearly state that
+            - Provide specific references when possible
+            """
+            ),
+            MessagesPlaceholder(variable_name="chat_history", optional=True),
+            HumanMessagePromptTemplate.from_template("{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ]
+    )
 
     # Create the agent
     agent = create_tool_calling_agent(llm, tools, prompt)
 
-    # Create the executor
     return AgentExecutor(
-        agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
+        agent=agent,
+        tools=tools,
+        verbose=True,
+        handle_parsing_errors=True,
     )
 
 
+def display_weather(weather_data):
+    """Display weather information in a nice format"""
+    if "error" in weather_data:
+        st.error(weather_data["error"])
+        return
+
+    if weather_data.get("type") == "weather":
+        # Location header
+        st.header(f"Weather for {weather_data['location']}")
+
+        # Current conditions
+        current = weather_data["current"]
+        st.subheader("Current Conditions")
+
+        # Use columns for current weather layout
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Temperature display with metric
+            st.metric(
+                "Temperature", f"{current['temperature']}°{current['temperatureUnit']}"
+            )
+            # Wind information
+            st.info(f"💨 Wind: {current['windSpeed']} {current['windDirection']}")
+
+        with col2:
+            # Current forecast
+            st.markdown(f"**🌤️ Conditions:** {current['shortForecast']}")
+            st.markdown(f"**📝 Details:** {current['detailedForecast']}")
+
+        # Extended forecast
+        st.subheader("Extended Forecast")
+        for period in weather_data["forecast"]:
+            with st.expander(f"📅 {period['name']}"):
+                st.markdown(
+                    f"**🌡️ Temperature:** {period['temperature']}°{period['temperatureUnit']}"
+                )
+                st.markdown(
+                    f"**💨 Wind:** {period['windSpeed']} {period['windDirection']}"
+                )
+                st.markdown(f"**🌤️ Forecast:** {period['shortForecast']}")
+                st.markdown(f"**📝 Details:** {period['detailedForecast']}")
+
+
 def main():
-    st.title("Grid Code & Weather Assistant")
+    st.title("GridGuide: Field Assistant")
 
     # Initialize if not in session state
-    if "initialized" not in st.session_state:
+    if "app" not in st.session_state:
         rag_chain = initialize_rag()
         weather_tool = WeatherTool()
         st.session_state.app = create_agent_workflow(rag_chain, weather_tool)
-        st.session_state.initialized = True
 
     # Create the input box
     user_input = st.text_input("Ask about weather or the Grid Code:")
@@ -156,8 +250,13 @@ def main():
             # Invoke the agent executor
             result = st.session_state.app.invoke({"input": user_input})
 
-            # Display the result
-            st.write(result["output"])
+            # Check if we have weather data in session state
+            if "weather_data" in st.session_state:
+                display_weather(st.session_state.weather_data)
+                # Clear the weather data after displaying
+                del st.session_state.weather_data
+            else:
+                st.write(result["output"])
 
 
 if __name__ == "__main__":
