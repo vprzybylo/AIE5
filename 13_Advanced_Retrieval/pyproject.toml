@@ -15,4 +15,6 @@ dependencies = [
     "ragas>=0.2.13",
     "rapidfuzz>=3.12.2",
     "rich>=13.9.4",
+    "matplotlib>=3.10.1",
+    "seaborn>=0.13.2",
 ]
