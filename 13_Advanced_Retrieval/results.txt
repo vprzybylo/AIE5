@@ -1,0 +1,7 @@
+BM25: {'context_recall': 0.8083, 'factual_correctness': 0.4710, 'answer_relevancy': 0.7645, 'context_entity_recall': 0.3566, 'noise_sensitivity_relevant': 0.1958}
+Naive: {'context_recall': 0.7667, 'factual_correctness': 0.3280, 'answer_relevancy': 0.8675, 'context_entity_recall': 0.3427, 'noise_sensitivity_relevant': 0.3095}
+Parent Document: {'context_recall': 0.3917, 'factual_correctness': 0.4040, 'answer_relevancy': 0.9584, 'context_entity_recall': 0.3540, 'noise_sensitivity_relevant': 0.1486}
+Contextual Compression: {'context_recall': 0.5500, 'factual_correctness': 0.4100, 'answer_relevancy': 0.9565, 'context_entity_recall': 0.3421, 'noise_sensitivity_relevant': 0.2416}
+Multi Query: {'context_recall': 0.7500, 'factual_correctness': 0.3580, 'answer_relevancy': 0.8623, 'context_entity_recall': 0.3676, 'noise_sensitivity_relevant': 0.3210}
+Ensemble: {'context_recall': 0.8917, 'factual_correctness': 0.4550, 'answer_relevancy': 0.9663, 'context_entity_recall': 0.3888, 'noise_sensitivity_relevant': 0.2214}
+Semantic: {'context_recall': 0.8833, 'factual_correctness': 0.3790, 'answer_relevancy': 0.8630, 'context_entity_recall': 0.3360, 'noise_sensitivity_relevant': 0.4573}
